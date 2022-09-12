@@ -25,7 +25,7 @@ import (
 
 // NOTE: only called if the member expression is *not* an assignment
 //
-func (checker *Checker) VisitMemberExpression(expression *ast.MemberExpression) ast.Repr {
+func (checker *Checker) VisitMemberExpression(expression *ast.MemberExpression) Type {
 	accessedType, member, isOptional := checker.visitMember(expression)
 
 	if !accessedType.IsInvalidType() {
@@ -37,10 +37,10 @@ func (checker *Checker) VisitMemberExpression(expression *ast.MemberExpression) 
 			}
 		}
 
-		if checker.positionInfoEnabled {
-			checker.MemberAccesses.Put(
-				expression.AccessPos,
-				expression.EndPosition(checker.memoryGauge),
+		if checker.PositionInfo != nil {
+			checker.PositionInfo.recordMemberAccess(
+				checker.memoryGauge,
+				expression,
 				memberAccessType,
 			)
 		}
@@ -143,8 +143,10 @@ func (checker *Checker) visitMember(expression *ast.MemberExpression) (accessedT
 		// By definition, the resource field can only be nested in a resource,
 		// so `self` is a resource, and the capture of it is checked separately
 
-		checker.checkResourceUseAfterInvalidation(accessedSelfMember, expression.Identifier)
-		checker.resources.AddUse(accessedSelfMember, expression.Identifier.Pos)
+		res := Resource{Member: accessedSelfMember}
+
+		checker.checkResourceUseAfterInvalidation(res, expression.Identifier)
+		checker.resources.AddUse(res, expression.Identifier.Pos)
 	}
 
 	identifier := expression.Identifier.Identifier
@@ -242,13 +244,12 @@ func (checker *Checker) visitMember(expression *ast.MemberExpression) (accessedT
 		}
 	} else {
 
-		if checker.positionInfoEnabled {
-			origins := checker.memberOrigins[accessedType]
-			origin := origins[identifier]
-			checker.Occurrences.Put(
+		if checker.PositionInfo != nil {
+			checker.PositionInfo.recordMemberOccurrence(
+				accessedType,
+				identifier,
 				identifierStartPosition,
 				identifierEndPosition,
-				origin,
 			)
 		}
 
@@ -315,8 +316,9 @@ func (checker *Checker) isReadableMember(member *Member) bool {
 			return true
 		}
 
-		if checker.memberAccountAccessHandler != nil {
-			return checker.memberAccountAccessHandler(checker, location)
+		memberAccountAccessHandler := checker.Config.MemberAccountAccessHandler
+		if memberAccountAccessHandler != nil {
+			return memberAccountAccessHandler(checker, location)
 		}
 	}
 

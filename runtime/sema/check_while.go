@@ -23,7 +23,7 @@ import (
 	"github.com/onflow/cadence/runtime/common"
 )
 
-func (checker *Checker) VisitWhileStatement(statement *ast.WhileStatement) ast.Repr {
+func (checker *Checker) VisitWhileStatement(statement *ast.WhileStatement) (_ struct{}) {
 
 	checker.VisitExpression(statement.Test, BoolType)
 
@@ -33,7 +33,7 @@ func (checker *Checker) VisitWhileStatement(statement *ast.WhileStatement) ast.R
 
 	_ = checker.checkPotentiallyUnevaluated(func() Type {
 		checker.functionActivations.WithLoop(func() {
-			statement.Block.Accept(checker)
+			checker.checkBlock(statement.Block)
 		})
 
 		// ignored
@@ -42,17 +42,17 @@ func (checker *Checker) VisitWhileStatement(statement *ast.WhileStatement) ast.R
 
 	checker.reportResourceUsesInLoop(statement.StartPos, statement.EndPosition(checker.memoryGauge))
 
-	return nil
+	return
 }
 
 func (checker *Checker) reportResourceUsesInLoop(startPos, endPos ast.Position) {
 
-	checker.resources.ForEach(func(resource any, info ResourceInfo) {
+	checker.resources.ForEach(func(resource Resource, info ResourceInfo) {
 
 		// If the resource is a variable,
 		// only report an error if the variable was declared outside the loop
 
-		if variable, isVariable := resource.(*Variable); isVariable &&
+		if variable := resource.Variable; variable != nil &&
 			variable.Pos != nil &&
 			variable.Pos.Compare(startPos) > 0 &&
 			variable.Pos.Compare(endPos) < 0 {
@@ -99,7 +99,7 @@ func (checker *Checker) reportResourceUsesInLoop(startPos, endPos ast.Position) 
 	})
 }
 
-func (checker *Checker) VisitBreakStatement(statement *ast.BreakStatement) ast.Repr {
+func (checker *Checker) VisitBreakStatement(statement *ast.BreakStatement) (_ struct{}) {
 
 	// Ensure that the `break` statement is inside a loop or switch statement
 
@@ -110,17 +110,17 @@ func (checker *Checker) VisitBreakStatement(statement *ast.BreakStatement) ast.R
 				Range:            ast.NewRangeFromPositioned(checker.memoryGauge, statement),
 			},
 		)
-		return nil
+		return
 	}
 
 	functionActivation := checker.functionActivations.Current()
 	checker.resources.JumpsOrReturns = true
 	functionActivation.ReturnInfo.DefinitelyJumped = true
 
-	return nil
+	return
 }
 
-func (checker *Checker) VisitContinueStatement(statement *ast.ContinueStatement) ast.Repr {
+func (checker *Checker) VisitContinueStatement(statement *ast.ContinueStatement) (_ struct{}) {
 
 	// Ensure that the `continue` statement is inside a loop statement
 
@@ -131,12 +131,12 @@ func (checker *Checker) VisitContinueStatement(statement *ast.ContinueStatement)
 				Range:            ast.NewRangeFromPositioned(checker.memoryGauge, statement),
 			},
 		)
-		return nil
+		return
 	}
 
 	functionActivation := checker.functionActivations.Current()
 	checker.resources.JumpsOrReturns = true
 	functionActivation.ReturnInfo.DefinitelyJumped = true
 
-	return nil
+	return
 }

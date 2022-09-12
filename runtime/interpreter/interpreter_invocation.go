@@ -118,10 +118,10 @@ func (interpreter *Interpreter) invokeInterpretedFunction(
 	// Start a new activation record.
 	// Lexical scope: use the function declaration's activation record,
 	// not the current one (which would be dynamic scope)
-	interpreter.activations.PushNewWithParent(function.Activation)
-	interpreter.activations.Current().isFunction = true
+	current := interpreter.activations.PushNewWithParent(function.Activation)
+	current.IsFunction = true
 
-	interpreter.CallStack.Push(invocation)
+	interpreter.sharedState.callStack.Push(invocation)
 
 	// Make `self` available, if any
 	if invocation.Self != nil {
@@ -142,7 +142,7 @@ func (interpreter *Interpreter) invokeInterpretedFunctionActivated(
 		if r := recover(); r != nil {
 			panic(r)
 		}
-		interpreter.CallStack.Pop()
+		interpreter.sharedState.callStack.Pop()
 	}()
 	defer interpreter.activations.Pop()
 
@@ -153,7 +153,7 @@ func (interpreter *Interpreter) invokeInterpretedFunctionActivated(
 	return interpreter.visitFunctionBody(
 		function.BeforeStatements,
 		function.PreConditions,
-		func() controlReturn {
+		func() StatementResult {
 			return interpreter.visitStatements(function.Statements)
 		},
 		function.PostConditions,

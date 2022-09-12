@@ -40,14 +40,14 @@ func init() {
 	deep.MaxDepth = 20
 }
 
-func ParseAndCheck(t *testing.T, code string) (*sema.Checker, error) {
+func ParseAndCheck(t testing.TB, code string) (*sema.Checker, error) {
 	return ParseAndCheckWithOptions(t, code, ParseAndCheckOptions{})
 }
 
 type ParseAndCheckOptions struct {
 	Location         common.Location
 	IgnoreParseError bool
-	Options          []sema.Option
+	Config           *sema.Config
 }
 
 var checkConcurrently = flag.Int(
@@ -75,12 +75,12 @@ func ParseAndCheckWithOptionsAndMemoryMetering(
 		options.Location = utils.TestLocation
 	}
 
-	program, err := parser.ParseProgram(code, memoryGauge)
+	program, err := parser.ParseProgram([]byte(code), memoryGauge)
 	if !options.IgnoreParseError && !assert.NoError(t, err) {
 		var sb strings.Builder
 		location := options.Location
 		printErr := pretty.NewErrorPrettyPrinter(&sb, true).
-			PrettyPrintError(err, location, map[common.Location]string{location: code})
+			PrettyPrintError(err, location, map[common.Location][]byte{location: []byte(code)})
 		if printErr != nil {
 			panic(printErr)
 		}
@@ -90,19 +90,21 @@ func ParseAndCheckWithOptionsAndMemoryMetering(
 
 	check := func() (*sema.Checker, error) {
 
-		checkerOptions := append(
-			[]sema.Option{
-				sema.WithAccessCheckMode(sema.AccessCheckModeNotSpecifiedUnrestricted),
-			},
-			options.Options...,
-		)
+		config := options.Config
+		if config == nil {
+			config = &sema.Config{}
+		}
+
+		if config.AccessCheckMode == sema.AccessCheckModeDefault {
+			config.AccessCheckMode = sema.AccessCheckModeNotSpecifiedUnrestricted
+		}
+		config.ExtendedElaborationEnabled = true
 
 		checker, err := sema.NewChecker(
 			program,
 			options.Location,
 			memoryGauge,
-			true,
-			checkerOptions...,
+			config,
 		)
 		if err != nil {
 			return checker, err

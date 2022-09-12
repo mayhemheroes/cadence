@@ -13,7 +13,7 @@ meta:
     - Cadence
     - Resources
     - Capabilities
-tags: 
+tags:
   - reference
   - NFT
   - Non-Fungible Token
@@ -50,7 +50,7 @@ but reading the rest is necessary to understand the language's design.
 
 ## Storing Multiple NFTs in a Collection
 
-In the [last tutorial](/cadence/tutorial/05-non-fungible-tokens-1),
+In the [last tutorial](05-non-fungible-tokens-1),
 we created a simple `NFT` resource, stored in at a storage path,
 then used a multi-sig transaction to transfer it from one account to another.
 
@@ -106,7 +106,7 @@ This contract expands on the `BasicNFT` we looked at by adding:
 2. An `NFTReceiver` interface that exposes three functions for the collection
 3. Declares a resource called `Collection` that implements the `NFTReceiver` interface
 4. The `Collection` will declare fields and functions to interact with it,
-including `ownedNFTs`,`init()`, `withdraw()`,`destroy()`, and other important functions
+including `ownedNFTs`, `init()`, `withdraw()`, `destroy()`, and other important functions
 5. Next, the contract declares functions that create a new NFT (`mintNFT()`) and an empty collection (`createEmptyCollection()`)
 7. Finally, the contract declares an `init()` function that initializes the path fields,
 creates an empty collection as well as a reference to it,
@@ -128,7 +128,7 @@ It contains what was already in `BasicNFT.cdc` plus additional resource declarat
 // ExampleNFT.cdc
 //
 // This is a complete version of the ExampleNFT contract
-// that includes withdraw and deposit functionality, as well as a
+// that includes withdraw and deposit functionalities, as well as a
 // collection resource that can be used to bundle NFTs together.
 //
 // Learn more about non-fungible tokens in this tutorial: https://docs.onflow.org/docs/non-fungible-tokens
@@ -276,8 +276,8 @@ There are a few new features that we use in this example, so let's walk through 
 
 We discussed above that when a dictionary stores a resource, it also becomes a resource!
 
-This means that the collection has to 
-have special rules for how to handle its own resource. 
+This means that the collection has to
+have special rules for how to handle its own resource.
 You wouldn't want it getting lost by accident!
 
 If the NFT `Collection` resource is destroyed with the `destroy` command,
@@ -316,7 +316,7 @@ pub fun getIDs(): [UInt64] {
 ```
 
 This can be used to iterate through the dictionary or just to see a list of what is stored.
-As you can see, [a variable length array type](/cadence/language/values-and-types/#arrays)
+As you can see, [a variable length array type](/cadence/language/values-and-types#arrays)
 is declared by enclosing the member type within square brackets (`[UInt64]`).
 
 ## Resources Owning Resources
@@ -333,7 +333,7 @@ this means that if a unique NFT wants to own another unique NFT,
 like a CryptoKitty owning a hat accessory,
 the Kitty literally stores the hat in its own storage and effectively owns it.
 The hat belongs to the CryptoKitty that it is stored in,
-and the hat can be transferred separately or along with the CryptoKitty that owns it,
+and the hat can be transferred separately or along with the CryptoKitty that owns it.
 
 ## Restricting Access to the NFT Collection
 
@@ -446,9 +446,9 @@ One way to create NFTs is by having an admin mint new tokens and send them to a 
 For the purpose of learning, we are simply implementing minting as a public function here.
 
 Most would implement this by having an NFT Minter resource. This would restrict minting,
-because the owner of this resource is the only one that can mint tokens. 
+because the owner of this resource is the only one that can mint tokens.
 
-You can see an example of this in the [Marketplace tutorial.](/cadence/tutorial/06-marketplace-compose/)
+You can see an example of this in the [Marketplace tutorial](08-marketplace-compose).
 
 <Callout type="info">
 
@@ -517,10 +517,10 @@ pub fun main() {
 
 ```
 
-You should see that account `0x01` owns the NFT with `id=1`
+You should see that account `0x01` owns the NFT with `id = 1`
 
 ```
-"Account 2 NFTs"
+"Account 1 NFTs"
 [1]
 ```
 
@@ -673,10 +673,9 @@ for information about the official Flow NFT standard and an example implementati
 
 Also check out the [Kitty Items Repo](https://github.com/onflow/kitty-items) for a production ready version!
 
-## Create a Flow Marketplace
+## Fungible Tokens
 
 ---
 
-Now that you have a working NFT, you can attempt to extend its functionality on your own,
-or you can learn how to create a marketplace that uses both fungible tokens and NFTs.
-Move on to the next tutorial to learn about Marketplaces in Cadence!
+Now that you have a working NFT, you will probably want to be able to trade it. For that you are going to need to
+understand how fungible tokens work on Flow, so go ahead and move to the next tutorial!

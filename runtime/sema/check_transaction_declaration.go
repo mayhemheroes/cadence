@@ -21,10 +21,11 @@ package sema
 import (
 	"github.com/onflow/cadence/runtime/ast"
 	"github.com/onflow/cadence/runtime/common"
+	"github.com/onflow/cadence/runtime/common/orderedmap"
 	"github.com/onflow/cadence/runtime/errors"
 )
 
-func (checker *Checker) VisitTransactionDeclaration(declaration *ast.TransactionDeclaration) ast.Repr {
+func (checker *Checker) VisitTransactionDeclaration(declaration *ast.TransactionDeclaration) (_ struct{}) {
 	transactionType := checker.Elaboration.TransactionDeclarationTypes[declaration]
 	if transactionType == nil {
 		panic(errors.NewUnreachableError())
@@ -35,9 +36,10 @@ func (checker *Checker) VisitTransactionDeclaration(declaration *ast.Transaction
 		checker.containerTypes[transactionType] = false
 	}()
 
-	fieldMembers := NewMemberAstFieldDeclarationOrderedMap()
+	fields := declaration.Fields
+	fieldMembers := orderedmap.New[MemberFieldDeclarationOrderedMap](len(fields))
 
-	for _, field := range declaration.Fields {
+	for _, field := range fields {
 		fieldName := field.Identifier.Identifier
 		member, ok := transactionType.Members.Get(fieldName)
 
@@ -79,7 +81,7 @@ func (checker *Checker) VisitTransactionDeclaration(declaration *ast.Transaction
 
 	checker.checkResourceFieldsInvalidated(transactionType, transactionType.Members)
 
-	return nil
+	return
 }
 
 func (checker *Checker) checkTransactionParameters(declaration *ast.TransactionDeclaration, parameters []*Parameter) {
@@ -172,7 +174,7 @@ func (checker *Checker) checkTransactionBlocks(declaration *ast.TransactionDecla
 func (checker *Checker) visitTransactionPrepareFunction(
 	prepareFunction *ast.SpecialFunctionDeclaration,
 	transactionType *TransactionType,
-	fieldMembers *MemberAstFieldDeclarationOrderedMap,
+	fieldMembers *MemberFieldDeclarationOrderedMap,
 ) {
 	if prepareFunction == nil {
 		return
@@ -266,8 +268,8 @@ func (checker *Checker) declareTransactionDeclaration(declaration *ast.Transacti
 
 	transactionType.Members = members
 	transactionType.Fields = fields
-	if checker.positionInfoEnabled {
-		checker.memberOrigins[transactionType] = origins
+	if checker.PositionInfo != nil {
+		checker.PositionInfo.recordMemberOrigins(transactionType, origins)
 	}
 
 	if declaration.Prepare != nil {

@@ -32,7 +32,7 @@ func Fuzz(data []byte) int {
 		return 0
 	}
 
-	program, err := parser.ParseProgram(string(data), nil)
+	program, err := parser.ParseProgram(data, nil)
 
 	if err != nil {
 		return 0
@@ -42,8 +42,9 @@ func Fuzz(data []byte) int {
 		program,
 		utils.TestLocation,
 		nil,
-		false,
-		sema.WithAccessCheckMode(sema.AccessCheckModeNotSpecifiedUnrestricted),
+		&sema.Config{
+			AccessCheckMode: sema.AccessCheckModeNotSpecifiedUnrestricted,
+		},
 	)
 	if err != nil {
 		return 0

@@ -501,10 +501,10 @@ func exportSimpleCompositeValue(
 			fieldName := field.Identifier
 
 			fieldValue := v.Fields[fieldName]
-			if fieldValue == nil && v.ComputedFields != nil {
-				if computedField, ok := v.ComputedFields[fieldName]; ok {
-					fieldValue = computedField(inter, getLocationRange)
-				}
+
+			computeField := v.ComputeField
+			if fieldValue == nil && computeField != nil {
+				fieldValue = computeField(fieldName, inter, getLocationRange)
 			}
 
 			exportedFieldValue, err := exportValueWithInterpreter(
@@ -759,8 +759,8 @@ func exportEvent(
 	return exported.WithType(eventType), nil
 }
 
-// importValue converts a Cadence value to a runtime value.
-func importValue(
+// ImportValue converts a Cadence value to a runtime value.
+func ImportValue(
 	inter *interpreter.Interpreter,
 	getLocationRange func() interpreter.LocationRange,
 	value cadence.Value,
@@ -1198,7 +1198,7 @@ func importOptionalValue(
 		innerType = optionalType.Type
 	}
 
-	innerValue, err := importValue(inter, getLocationRange, v.Value, innerType)
+	innerValue, err := ImportValue(inter, getLocationRange, v.Value, innerType)
 	if err != nil {
 		return nil, err
 	}
@@ -1224,7 +1224,7 @@ func importArrayValue(
 	}
 
 	for i, element := range v.Values {
-		value, err := importValue(
+		value, err := ImportValue(
 			inter,
 			getLocationRange,
 			element,
@@ -1291,7 +1291,7 @@ func importDictionaryValue(
 	}
 
 	for i, pair := range v.Pairs {
-		key, err := importValue(
+		key, err := ImportValue(
 			inter,
 			getLocationRange,
 			pair.Key,
@@ -1302,7 +1302,7 @@ func importDictionaryValue(
 		}
 		keysAndValues[i*2] = key
 
-		value, err := importValue(
+		value, err := ImportValue(
 			inter,
 			getLocationRange,
 			pair.Value,
@@ -1373,7 +1373,7 @@ func importCompositeValue(
 	fieldTypes []cadence.Field,
 	fieldValues []cadence.Value,
 ) (
-	*interpreter.CompositeValue,
+	interpreter.Value,
 	error,
 ) {
 	var fields []interpreter.CompositeField
@@ -1395,7 +1395,7 @@ func importCompositeValue(
 			expectedFieldType = member.TypeAnnotation.Type
 		}
 
-		importedFieldValue, err := importValue(
+		importedFieldValue, err := ImportValue(
 			inter,
 			getLocationRange,
 			fieldValue,
@@ -1424,12 +1424,12 @@ func importCompositeValue(
 		case sema.HashAlgorithmType:
 			// HashAlgorithmType has a dedicated constructor
 			// (e.g. it has host functions)
-			return importHashAlgorithm(inter, fields)
+			return importHashAlgorithm(fields)
 
 		case sema.SignatureAlgorithmType:
 			// SignatureAlgorithmType has a dedicated constructor
 			// (e.g. it has host functions)
-			return importSignatureAlgorithm(inter, fields)
+			return importSignatureAlgorithm(fields)
 
 		default:
 			return nil, errors.NewDefaultUserError(
@@ -1460,7 +1460,7 @@ func importPublicKey(
 ) {
 
 	var publicKeyValue *interpreter.ArrayValue
-	var signAlgoValue *interpreter.CompositeValue
+	var signAlgoValue *interpreter.SimpleCompositeValue
 
 	ty := sema.PublicKeyType
 
@@ -1480,7 +1480,7 @@ func importPublicKey(
 			publicKeyValue = arrayValue
 
 		case sema.PublicKeySignAlgoField:
-			compositeValue, ok := field.Value.(*interpreter.CompositeValue)
+			compositeValue, ok := field.Value.(*interpreter.SimpleCompositeValue)
 			if !ok {
 				return nil, errors.NewDefaultUserError(
 					"cannot import value of type '%s'. invalid value for field '%s': %v",
@@ -1523,15 +1523,14 @@ func importPublicKey(
 		getLocationRange,
 		publicKeyValue,
 		signAlgoValue,
-		inter.PublicKeyValidationHandler,
+		inter.Config.PublicKeyValidationHandler,
 	), nil
 }
 
 func importHashAlgorithm(
-	inter *interpreter.Interpreter,
 	fields []interpreter.CompositeField,
 ) (
-	*interpreter.CompositeValue,
+	interpreter.MemberAccessibleValue,
 	error,
 ) {
 
@@ -1570,14 +1569,21 @@ func importHashAlgorithm(
 		)
 	}
 
-	return stdlib.NewHashAlgorithmCase(inter, uint8(rawValue)), nil
+	caseValue, ok := stdlib.HashAlgorithmCaseValues[rawValue]
+	if !ok {
+		return nil, errors.NewDefaultUserError(
+			"unknown HashAlgorithm with rawValue %d",
+			rawValue,
+		)
+	}
+
+	return caseValue, nil
 }
 
 func importSignatureAlgorithm(
-	inter *interpreter.Interpreter,
 	fields []interpreter.CompositeField,
 ) (
-	*interpreter.CompositeValue,
+	interpreter.MemberAccessibleValue,
 	error,
 ) {
 
@@ -1616,5 +1622,13 @@ func importSignatureAlgorithm(
 		)
 	}
 
-	return stdlib.NewSignatureAlgorithmCase(inter, uint8(rawValue)), nil
+	caseValue, ok := stdlib.SignatureAlgorithmCaseValues[rawValue]
+	if !ok {
+		return nil, errors.NewDefaultUserError(
+			"unknown SignatureAlgorithm with rawValue %d",
+			rawValue,
+		)
+	}
+
+	return caseValue, nil
 }

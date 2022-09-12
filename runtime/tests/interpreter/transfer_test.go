@@ -21,6 +21,8 @@ package interpreter_test
 import (
 	"testing"
 
+	"github.com/onflow/cadence/runtime/activations"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/onflow/cadence/runtime/common"
@@ -44,25 +46,27 @@ func TestInterpretTransferCheck(t *testing.T) {
 			Kind:       common.CompositeKindStructure,
 		}
 
-		valueDeclarations := stdlib.StandardLibraryValues{
-			{
-				Name: "fruit",
-				Type: ty,
-				// NOTE: not an instance of the type
-				ValueFactory: func(_ *interpreter.Interpreter) interpreter.Value {
-					return interpreter.NewUnmeteredStringValue("fruit")
-				},
-				Kind: common.DeclarationKindConstant,
-			},
+		valueDeclaration := stdlib.StandardLibraryValue{
+			Name: "fruit",
+			Type: ty,
+			// NOTE: not an instance of the type
+			Value: interpreter.NewUnmeteredStringValue("fruit"),
+			Kind:  common.DeclarationKindConstant,
 		}
 
-		typeDeclarations := stdlib.StandardLibraryTypes{
-			{
-				Name: ty.Identifier,
-				Type: ty,
-				Kind: common.DeclarationKindStructure,
-			},
-		}
+		baseValueActivation := sema.NewVariableActivation(sema.BaseValueActivation)
+
+		baseValueActivation.DeclareValue(valueDeclaration)
+
+		baseTypeActivation := sema.NewVariableActivation(sema.BaseTypeActivation)
+		baseTypeActivation.DeclareType(stdlib.StandardLibraryType{
+			Name: ty.Identifier,
+			Type: ty,
+			Kind: common.DeclarationKindStructure,
+		})
+
+		baseActivation := activations.NewActivation[*interpreter.Variable](nil, interpreter.BaseActivation)
+		interpreter.Declare(baseActivation, valueDeclaration)
 
 		inter, err := parseCheckAndInterpretWithOptions(t,
 			`
@@ -71,12 +75,12 @@ func TestInterpretTransferCheck(t *testing.T) {
               }
             `,
 			ParseCheckAndInterpretOptions{
-				CheckerOptions: []sema.Option{
-					sema.WithPredeclaredValues(valueDeclarations.ToSemaValueDeclarations()),
-					sema.WithPredeclaredTypes(typeDeclarations.ToTypeDeclarations()),
+				CheckerConfig: &sema.Config{
+					BaseTypeActivation:  baseTypeActivation,
+					BaseValueActivation: baseValueActivation,
 				},
-				Options: []interpreter.Option{
-					interpreter.WithPredeclaredValues(valueDeclarations.ToInterpreterValueDeclarations()),
+				Config: &interpreter.Config{
+					BaseActivation: baseActivation,
 				},
 			},
 		)
@@ -118,8 +122,8 @@ func TestInterpretTransferCheck(t *testing.T) {
               }
             `,
 			ParseCheckAndInterpretOptions{
-				Options: []interpreter.Option{
-					makeContractValueHandler(nil, nil, nil),
+				Config: &interpreter.Config{
+					ContractValueHandler: makeContractValueHandler(nil, nil, nil),
 				},
 			},
 		)
@@ -159,8 +163,8 @@ func TestInterpretTransferCheck(t *testing.T) {
               }
             `,
 			ParseCheckAndInterpretOptions{
-				Options: []interpreter.Option{
-					makeContractValueHandler(nil, nil, nil),
+				Config: &interpreter.Config{
+					ContractValueHandler: makeContractValueHandler(nil, nil, nil),
 				},
 			},
 		)

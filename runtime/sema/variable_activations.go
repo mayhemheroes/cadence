@@ -86,7 +86,7 @@ func (a *VariableActivation) Find(name string) *Variable {
 //
 func (a *VariableActivation) Set(name string, variable *Variable) {
 	if a.entries == nil {
-		a.entries = NewStringVariableOrderedMap()
+		a.entries = &StringVariableOrderedMap{}
 	}
 
 	a.entries.Set(name, variable)
@@ -126,6 +126,40 @@ func (a *VariableActivation) ForEach(cb func(string, *Variable) error) error {
 	}
 
 	return nil
+}
+
+func (a *VariableActivation) DeclareValue(declaration ValueDeclaration) {
+	name := declaration.ValueDeclarationName()
+
+	a.Set(name, &Variable{
+		Identifier:      name,
+		DeclarationKind: declaration.ValueDeclarationKind(),
+		Type:            declaration.ValueDeclarationType(),
+		// TODO: add access to ValueDeclaration and use declaration's access instead here
+		Access:          ast.AccessPublic,
+		IsConstant:      declaration.ValueDeclarationIsConstant(),
+		ArgumentLabels:  declaration.ValueDeclarationArgumentLabels(),
+		Pos:             declaration.ValueDeclarationPosition(),
+		DocString:       declaration.ValueDeclarationDocString(),
+		ActivationDepth: 0,
+	})
+}
+
+func (a *VariableActivation) DeclareType(declaration TypeDeclaration) {
+	name := declaration.TypeDeclarationName()
+
+	a.Set(name, &Variable{
+		Identifier:      name,
+		DeclarationKind: declaration.TypeDeclarationKind(),
+		Type:            declaration.TypeDeclarationType(),
+		// TODO: add access to TypeDeclaration and use declaration's access instead here
+		Access:         ast.AccessPublic,
+		IsConstant:     true,
+		ArgumentLabels: nil,
+		Pos:            declaration.TypeDeclarationPosition(),
+		// TODO: DocString
+		ActivationDepth: 0,
+	})
 }
 
 var variableActivationPool = sync.Pool{
@@ -249,7 +283,7 @@ type variableDeclaration struct {
 	allowOuterScopeShadowing bool
 }
 
-func (a *VariableActivations) Declare(declaration variableDeclaration) (variable *Variable, err error) {
+func (a *VariableActivations) declare(declaration variableDeclaration) (variable *Variable, err error) {
 
 	depth := a.Depth()
 
@@ -293,6 +327,26 @@ func (a *VariableActivations) Declare(declaration variableDeclaration) (variable
 	return variable, err
 }
 
+func (a *VariableActivations) DeclareValue(declaration ValueDeclaration) (*Variable, error) {
+	var variablePos ast.Position
+	declarationPos := declaration.ValueDeclarationPosition()
+	if declarationPos != nil {
+		variablePos = *declarationPos
+	}
+
+	return a.declare(variableDeclaration{
+		identifier: declaration.ValueDeclarationName(),
+		kind:       declaration.ValueDeclarationKind(),
+		ty:         declaration.ValueDeclarationType(),
+		// TODO: add access to ValueDeclaration and use declaration's access instead here
+		access:         ast.AccessPublic,
+		isConstant:     declaration.ValueDeclarationIsConstant(),
+		argumentLabels: declaration.ValueDeclarationArgumentLabels(),
+		pos:            variablePos,
+		docString:      declaration.ValueDeclarationDocString(),
+	})
+}
+
 type typeDeclaration struct {
 	identifier               ast.Identifier
 	ty                       Type
@@ -302,8 +356,8 @@ type typeDeclaration struct {
 	docString                string
 }
 
-func (a *VariableActivations) DeclareType(declaration typeDeclaration) (*Variable, error) {
-	return a.Declare(
+func (a *VariableActivations) declareType(declaration typeDeclaration) (*Variable, error) {
+	return a.declare(
 		variableDeclaration{
 			identifier:               declaration.identifier.Identifier,
 			ty:                       declaration.ty,
@@ -318,12 +372,12 @@ func (a *VariableActivations) DeclareType(declaration typeDeclaration) (*Variabl
 	)
 }
 
-func (a *VariableActivations) DeclareImplicitConstant(
+func (a *VariableActivations) declareImplicitConstant(
 	identifier string,
 	ty Type,
 	kind common.DeclarationKind,
 ) (*Variable, error) {
-	return a.Declare(
+	return a.declare(
 		variableDeclaration{
 			identifier:               identifier,
 			ty:                       ty,

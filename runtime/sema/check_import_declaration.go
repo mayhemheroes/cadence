@@ -38,12 +38,14 @@ import (
 // 2. Acquiring the programs for the resolved imports. For each resolved import a separate program can be returned.
 //
 
-func (checker *Checker) VisitImportDeclaration(_ *ast.ImportDeclaration) ast.Repr {
+func (checker *Checker) VisitImportDeclaration(declaration *ast.ImportDeclaration) struct{} {
 	// Handled in `declareImportDeclaration`
-	panic(&UnreachableStatementError{})
+	panic(&UnreachableStatementError{
+		Range: ast.NewRangeFromPositioned(checker.memoryGauge, declaration),
+	})
 }
 
-func (checker *Checker) declareImportDeclaration(declaration *ast.ImportDeclaration) ast.Repr {
+func (checker *Checker) declareImportDeclaration(declaration *ast.ImportDeclaration) Type {
 	locationRange := ast.NewRange(
 		checker.memoryGauge,
 		declaration.LocationPos,
@@ -71,7 +73,8 @@ func (checker *Checker) resolveLocation(identifiers []ast.Identifier, location c
 	// If no location handler is available,
 	// default to resolving to a single location that declares all identifiers
 
-	if checker.locationHandler == nil {
+	locationHandler := checker.Config.LocationHandler
+	if locationHandler == nil {
 		return []ResolvedLocation{
 			{
 				Location:    location,
@@ -82,7 +85,7 @@ func (checker *Checker) resolveLocation(identifiers []ast.Identifier, location c
 
 	// A location handler is available,
 	// use it to resolve the location / identifiers
-	return checker.locationHandler(identifiers, location)
+	return locationHandler(identifiers, location)
 }
 
 func (checker *Checker) importResolvedLocation(resolvedLocation ResolvedLocation, locationRange ast.Range) {
@@ -93,9 +96,10 @@ func (checker *Checker) importResolvedLocation(resolvedLocation ResolvedLocation
 
 	var imp Import
 
-	if checker.importHandler != nil {
+	importHandler := checker.Config.ImportHandler
+	if importHandler != nil {
 		var err error
-		imp, err = checker.importHandler(checker, location, locationRange)
+		imp, err = importHandler(checker, location, locationRange)
 		if err != nil {
 
 			// The import handler may return CyclicImportsError specifically
@@ -149,7 +153,6 @@ func (checker *Checker) importResolvedLocation(resolvedLocation ResolvedLocation
 		checker.valueActivations,
 		resolvedLocation.Identifiers,
 		allValueElements,
-		imp.IsImportableValue,
 	)
 
 	// Attempt to import the requested type declarations
@@ -159,7 +162,6 @@ func (checker *Checker) importResolvedLocation(resolvedLocation ResolvedLocation
 		checker.typeActivations,
 		resolvedLocation.Identifiers,
 		allTypeElements,
-		imp.IsImportableType,
 	)
 
 	// For each identifier, report if the import is invalid due to
@@ -216,18 +218,12 @@ func (checker *Checker) importResolvedLocation(resolvedLocation ResolvedLocation
 			if _, ok := availableSet[identifier]; ok {
 				return
 			}
-			if !imp.IsImportableValue(identifier) {
-				return
-			}
 			availableSet[identifier] = struct{}{}
 			available = append(available, identifier)
 		})
 
 		allTypeElements.Foreach(func(identifier string, _ ImportElement) {
 			if _, ok := availableSet[identifier]; ok {
-				return
-			}
-			if !imp.IsImportableType(identifier) {
 				return
 			}
 			availableSet[identifier] = struct{}{}
@@ -252,7 +248,7 @@ func (checker *Checker) handleMissingImports(missing []ast.Identifier, available
 		// NOTE: declare constant variable with invalid type to silence rest of program
 		const access = ast.AccessPrivate
 
-		_, err := checker.valueActivations.Declare(variableDeclaration{
+		_, err := checker.valueActivations.declare(variableDeclaration{
 			identifier:               identifier.Identifier,
 			ty:                       InvalidType,
 			access:                   access,
@@ -264,7 +260,7 @@ func (checker *Checker) handleMissingImports(missing []ast.Identifier, available
 		checker.report(err)
 
 		// NOTE: declare type with invalid type to silence rest of program
-		_, err = checker.typeActivations.DeclareType(typeDeclaration{
+		_, err = checker.typeActivations.declareType(typeDeclaration{
 			identifier:               identifier,
 			ty:                       InvalidType,
 			declarationKind:          common.DeclarationKindType,
@@ -279,7 +275,6 @@ func (checker *Checker) importElements(
 	valueActivations *VariableActivations,
 	requestedIdentifiers []ast.Identifier,
 	availableElements *StringImportElementOrderedMap,
-	filter func(name string) bool,
 ) (
 	found map[ast.Identifier]bool,
 	invalidAccessed map[ast.Identifier]ImportElement,
@@ -296,7 +291,7 @@ func (checker *Checker) importElements(
 
 	identifiersCount := len(requestedIdentifiers)
 	if identifiersCount > 0 && availableElements != nil {
-		elements = NewStringImportElementOrderedMap()
+		elements = &StringImportElementOrderedMap{}
 		for _, identifier := range requestedIdentifiers {
 			name := identifier.Identifier
 			element, ok := availableElements.Get(name)
@@ -313,10 +308,6 @@ func (checker *Checker) importElements(
 
 	if elements != nil {
 		elements.Foreach(func(name string, element ImportElement) {
-
-			if !filter(name) {
-				return
-			}
 
 			// If the variable can't be imported due to restricted access,
 			// report an error, but still import the variable
@@ -335,7 +326,7 @@ func (checker *Checker) importElements(
 				}
 			}
 
-			_, err := valueActivations.Declare(variableDeclaration{
+			_, err := valueActivations.declare(variableDeclaration{
 				identifier: name,
 				ty:         element.Type,
 				// TODO: implies that type is "re-exported"

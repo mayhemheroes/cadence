@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/onflow/cadence/runtime/activations"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -3488,6 +3490,7 @@ func TestInterpretDynamicCastingCapability(t *testing.T) {
 			},
 		),
 	}
+
 	capabilityValueDeclaration := stdlib.StandardLibraryValue{
 		Name: "cap",
 		Type: &sema.CapabilityType{
@@ -3495,22 +3498,22 @@ func TestInterpretDynamicCastingCapability(t *testing.T) {
 				Type: structType,
 			},
 		},
-		ValueFactory: func(_ *interpreter.Interpreter) interpreter.Value {
-			return capabilityValue
-		},
-		Kind: common.DeclarationKindConstant,
+		Value: capabilityValue,
+		Kind:  common.DeclarationKindConstant,
 	}
 
+	baseValueActivation := sema.NewVariableActivation(sema.BaseValueActivation)
+	baseValueActivation.DeclareValue(capabilityValueDeclaration)
+
+	baseActivation := activations.NewActivation[*interpreter.Variable](nil, interpreter.BaseActivation)
+	interpreter.Declare(baseActivation, capabilityValueDeclaration)
+
 	options := ParseCheckAndInterpretOptions{
-		CheckerOptions: []sema.Option{
-			sema.WithPredeclaredValues([]sema.ValueDeclaration{
-				capabilityValueDeclaration,
-			}),
+		CheckerConfig: &sema.Config{
+			BaseValueActivation: baseValueActivation,
 		},
-		Options: []interpreter.Option{
-			interpreter.WithPredeclaredValues([]interpreter.ValueDeclaration{
-				capabilityValueDeclaration,
-			}),
+		Config: &interpreter.Config{
+			BaseActivation: baseActivation,
 		},
 	}
 

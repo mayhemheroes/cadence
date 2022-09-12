@@ -118,7 +118,7 @@ A field may belong to a contract, struct, resource, or interface.
   // Updated contract
 
   pub contract Foo {
-      priv var a: Int   // access modifier changed to 'priv'
+      priv var a: String   // access modifier changed to 'priv'
   }
   ```
 
@@ -140,7 +140,7 @@ A field may belong to a contract, struct, resource, or interface.
   }
   ```
     - Initializer of a contract only run once, when the contract is deployed for the first time. It does not rerun
-      when the contract is updated. However it is still required to be present in the updated contract to satisfy type checks. 
+      when the contract is updated. However it is still required to be present in the updated contract to satisfy type checks.
     - Thus, the stored data won't have the new field, as the initializations for the newly added fields do not get
       executed.
     - Decoding stored data will result in garbage or missing values for such fields.
@@ -148,7 +148,7 @@ A field may belong to a contract, struct, resource, or interface.
 - Changing the type of existing field is not valid.
   ```cadence
   // Existing contract
-  
+
   pub contract Foo {
       pub var a: String
   }
@@ -178,7 +178,7 @@ A field may belong to a contract, struct, resource, or interface.
   stores concrete type/value, but doesn't store the conformance info.
   ```cadence
   // Existing struct
-  
+
   pub struct Foo {
   }
 
@@ -189,7 +189,7 @@ A field may belong to a contract, struct, resource, or interface.
   }
   ```
   - However, if adding a conformance also requires changing the existing structure (e.g: adding a new field that is
-    enforced by the new conformance), then the other restrictions (such as [restrictions on fields](#fields)) may 
+    enforced by the new conformance), then the other restrictions (such as [restrictions on fields](#fields)) may
     prevent performing such an update.
 
 #### Invalid Changes:
@@ -201,7 +201,7 @@ A field may belong to a contract, struct, resource, or interface.
 - Changing the type of declaration is not valid. i.e: Changing from a struct to interface, and vise versa.
   ```cadence
   // Existing struct
-  
+
   pub struct Foo {
   }
 
@@ -214,7 +214,7 @@ A field may belong to a contract, struct, resource, or interface.
 - Removing an interface conformance of a struct/resource is not valid.
   ```cadence
   // Existing struct
-  
+
   pub struct Foo: T {
   }
 
@@ -377,15 +377,19 @@ it originally was (type confusion).
     inconsistencies and type-confusions as described earlier.
 
 ## Functions
-Updating a function definition is always valid, as function definitions are never stored as data. 
-i.e: Function definition is a part of the code, but not data.
-- Changing a function signature (parameters, return types) is valid.
-- Changing a function body is also valid.
-- Changing the access modifier is valid.
 
-However, changing a *function type* may or may not be valid, depending on where it is used.
-i.e: If a function type is used in the type annotation of a composite type field (direct or indirect), then changing
-the function type signature is the same as changing the type annotation of that field (which is again invalid).
+Adding, changing, and deleting a function definition is always valid, as function definitions are never stored as data 
+(function definitions are part of the code, but not data).
+
+- Adding a function is valid.
+- Deleting a function is valid.
+- Changing a function signature (parameters, return types) is valid.
+- Changing a function body is valid.
+- Changing the access modifiers is valid.
+
+However, changing a *function type* may or may not be valid, depending on where it is used:
+If a function type is used in the type annotation of a composite type field (direct or indirect), 
+then changing the function type signature is the same as changing the type annotation of that field (which is invalid).
 
 ## Constructors
 Similar to functions, constructors are also not stored. Hence, any changes to constructors are valid.
