@@ -2839,6 +2839,7 @@ func NewIntValueFromBigInt(
 	bigIntConstructor func() *big.Int,
 ) IntValue {
 	common.UseMemory(memoryGauge, memoryUsage)
+	common.UseMemory(memoryGauge, common.BigIntWrapperMemoryUsage)
 	value := bigIntConstructor()
 	return NewUnmeteredIntValueFromBigInt(value)
 }
@@ -5742,6 +5743,7 @@ var Int128MemoryUsage = common.NewBigIntMemoryUsage(16)
 
 func NewInt128ValueFromBigInt(memoryGauge common.MemoryGauge, bigIntConstructor func() *big.Int) Int128Value {
 	common.UseMemory(memoryGauge, Int128MemoryUsage)
+	common.UseMemory(memoryGauge, common.BigIntWrapperMemoryUsage)
 	value := bigIntConstructor()
 	return NewUnmeteredInt128ValueFromBigInt(value)
 }
@@ -6430,6 +6432,7 @@ var Int256MemoryUsage = common.NewBigIntMemoryUsage(32)
 
 func NewInt256ValueFromBigInt(memoryGauge common.MemoryGauge, bigIntConstructor func() *big.Int) Int256Value {
 	common.UseMemory(memoryGauge, Int256MemoryUsage)
+	common.UseMemory(memoryGauge, common.BigIntWrapperMemoryUsage)
 	value := bigIntConstructor()
 	return NewUnmeteredInt256ValueFromBigInt(value)
 }
@@ -9812,6 +9815,7 @@ var Uint128MemoryUsage = common.NewBigIntMemoryUsage(16)
 
 func NewUInt128ValueFromBigInt(memoryGauge common.MemoryGauge, bigIntConstructor func() *big.Int) UInt128Value {
 	common.UseMemory(memoryGauge, Uint128MemoryUsage)
+	common.UseMemory(memoryGauge, common.BigIntWrapperMemoryUsage)
 	value := bigIntConstructor()
 	return NewUnmeteredUInt128ValueFromBigInt(value)
 }
@@ -10443,6 +10447,7 @@ var Uint256MemoryUsage = common.NewBigIntMemoryUsage(32)
 
 func NewUInt256ValueFromBigInt(memoryGauge common.MemoryGauge, bigIntConstructor func() *big.Int) UInt256Value {
 	common.UseMemory(memoryGauge, Uint256MemoryUsage)
+	common.UseMemory(memoryGauge, common.BigIntWrapperMemoryUsage)
 	value := bigIntConstructor()
 	return NewUnmeteredUInt256ValueFromBigInt(value)
 }
@@ -16210,8 +16215,8 @@ func (NilValue) isOptionalValue() {}
 
 func (NilValue) forEach(_ func(Value)) {}
 
-func (n NilValue) fmap(inter *Interpreter, f func(Value) Value) OptionalValue {
-	return n
+func (v NilValue) fmap(*Interpreter, func(Value) Value) OptionalValue {
+	return v
 }
 
 func (NilValue) IsDestroyed() bool {
@@ -16423,7 +16428,7 @@ func (v *SomeValue) RecursiveString(seenReferences SeenReferences) string {
 	return v.value.RecursiveString(seenReferences)
 }
 
-func (v SomeValue) MeteredString(memoryGauge common.MemoryGauge, seenReferences SeenReferences) string {
+func (v *SomeValue) MeteredString(memoryGauge common.MemoryGauge, seenReferences SeenReferences) string {
 	return v.value.MeteredString(memoryGauge, seenReferences)
 }
 

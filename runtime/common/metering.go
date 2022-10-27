@@ -125,6 +125,7 @@ var (
 
 	// Interpreter values
 
+	BigIntWrapperMemoryUsage            = NewConstantMemoryUsage(MemoryKindBigIntWrapper)
 	SimpleCompositeValueBaseMemoryUsage = NewConstantMemoryUsage(MemoryKindSimpleCompositeValueBase)
 	AtreeMapElementOverhead             = NewConstantMemoryUsage(MemoryKindAtreeMapElementOverhead)
 	AtreeArrayElementOverhead           = NewConstantMemoryUsage(MemoryKindAtreeArrayElementOverhead)

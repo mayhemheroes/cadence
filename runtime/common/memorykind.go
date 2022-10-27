@@ -28,6 +28,7 @@ const (
 
 	// Values
 
+	MemoryKindBigIntWrapper
 	MemoryKindBoolValue
 	MemoryKindAddressValue
 	MemoryKindStringValue

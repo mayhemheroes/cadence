@@ -1726,6 +1726,13 @@ func parseIntegerLiteral(p *parser, literal, text []byte, kind IntegerLiteralKin
 		if withoutUnderscores == "" {
 			report(InvalidNumberLiteralKindMissingDigits)
 		} else {
+			common.UseMemory(
+				p.memoryGauge,
+				common.NewBigIntMemoryUsage(
+					common.OverEstimateBigIntFromString(withoutUnderscores),
+				),
+			)
+
 			var ok bool
 			value, ok = new(big.Int).SetString(withoutUnderscores, base)
 			if !ok {
