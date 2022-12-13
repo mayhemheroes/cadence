@@ -1,0 +1,6 @@
+project: onflow-cadence
+target: onflow-cadence
+
+cmds:
+  - cmd: /fuzz_runtime_parser
+    env: {}
