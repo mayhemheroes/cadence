@@ -47,6 +47,7 @@ type ParseAndCheckOptions struct {
 	Location         common.Location
 	IgnoreParseError bool
 	Config           *sema.Config
+	ParseOptions     parser.Config
 }
 
 var checkConcurrently = flag.Int(
@@ -74,7 +75,7 @@ func ParseAndCheckWithOptionsAndMemoryMetering(
 		options.Location = utils.TestLocation
 	}
 
-	program, err := parser.ParseProgram([]byte(code), memoryGauge)
+	program, err := parser.ParseProgram(memoryGauge, []byte(code), options.ParseOptions)
 	if !options.IgnoreParseError && !assert.NoError(t, err) {
 		var sb strings.Builder
 		location := options.Location
@@ -191,13 +192,13 @@ func RequireCheckerErrors(t *testing.T, err error, count int) []error {
 }
 
 func RequireGlobalType(t *testing.T, elaboration *sema.Elaboration, name string) sema.Type {
-	variable, ok := elaboration.GlobalTypes.Get(name)
+	variable, ok := elaboration.GetGlobalType(name)
 	require.True(t, ok, "global type '%s' missing", name)
 	return variable.Type
 }
 
 func RequireGlobalValue(t *testing.T, elaboration *sema.Elaboration, name string) sema.Type {
-	variable, ok := elaboration.GlobalValues.Get(name)
+	variable, ok := elaboration.GetGlobalValue(name)
 	require.True(t, ok, "global value '%s' missing", name)
 	return variable.Type
 }

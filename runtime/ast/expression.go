@@ -1391,6 +1391,8 @@ var functionExpressionEmptyBlockDoc prettier.Doc = prettier.Text(" {}")
 
 func FunctionDocument(
 	access Access,
+	isStatic bool,
+	isNative bool,
 	includeKeyword bool,
 	identifier string,
 	parameterList *ParameterList,
@@ -1422,6 +1424,22 @@ func FunctionDocument(
 		doc = append(
 			doc,
 			prettier.Text(access.Keyword()),
+			prettier.Space,
+		)
+	}
+
+	if isStatic {
+		doc = append(
+			doc,
+			staticKeywordDoc,
+			prettier.Space,
+		)
+	}
+
+	if isNative {
+		doc = append(
+			doc,
+			nativeKeywordDoc,
 			prettier.Space,
 		)
 	}
@@ -1465,6 +1483,8 @@ func FunctionDocument(
 func (e *FunctionExpression) Doc() prettier.Doc {
 	return FunctionDocument(
 		AccessNotSpecified,
+		false,
+		false,
 		true,
 		"",
 		e.ParameterList,
@@ -2026,8 +2046,13 @@ func NewVoidExpression(
 	startPos Position,
 	endPos Position,
 ) *VoidExpression {
-	common.UseMemory(gauge, common.VoidValueMemoryUsage)
-	return &VoidExpression{Range: Range{startPos, endPos}}
+	common.UseMemory(gauge, common.VoidExpressionMemoryUsage)
+	return &VoidExpression{
+		Range: Range{
+			StartPos: startPos,
+			EndPos:   endPos,
+		},
+	}
 }
 
 var _ Element = &VoidExpression{}

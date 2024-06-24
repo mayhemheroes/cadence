@@ -63,7 +63,7 @@ func PrepareProgramFromFile(location common.StringLocation, codes map[common.Loc
 func PrepareProgram(code []byte, location common.Location, codes map[common.Location][]byte) (*ast.Program, func(error)) {
 	must := mustClosure(location, codes)
 
-	program, err := parser.ParseProgram(code, nil)
+	program, err := parser.ParseProgram(nil, code, parser.Config{})
 	codes[location] = code
 	must(err)
 
@@ -99,9 +99,10 @@ func DefaultCheckerConfig(
 			importedLocation common.Location,
 			_ ast.Range,
 		) (sema.Import, error) {
-			if importedLocation == stdlib.CryptoChecker.Location {
+			if importedLocation == stdlib.CryptoCheckerLocation {
+				cryptoChecker := stdlib.CryptoChecker()
 				return sema.ElaborationImport{
-					Elaboration: stdlib.CryptoChecker.Elaboration,
+					Elaboration: cryptoChecker.Elaboration,
 				}, nil
 			}
 

@@ -54,7 +54,7 @@ var beforeType = func() *FunctionType {
 		TypeParameters: []*TypeParameter{
 			typeParameter,
 		},
-		Parameters: []*Parameter{
+		Parameters: []Parameter{
 			{
 				Label:          ArgumentLabelNotRequired,
 				Identifier:     "value",
@@ -99,7 +99,7 @@ type Checker struct {
 	resources                          *Resources
 	typeActivations                    *VariableActivations
 	containerTypes                     map[Type]bool
-	functionActivations                *FunctionActivations
+	functionActivations                FunctionActivations
 	inCondition                        bool
 	isChecked                          bool
 	inCreate                           bool
@@ -135,16 +135,18 @@ func NewChecker(
 		return nil, errors.NewDefaultUserError("invalid default access check mode")
 	}
 
-	functionActivations := &FunctionActivations{}
-	functionActivations.EnterFunction(&FunctionType{
-		ReturnTypeAnnotation: NewTypeAnnotation(VoidType)},
+	functionActivations := FunctionActivations{
+		// Pre-allocate a common function depth
+		activations: make([]FunctionActivation, 0, 2),
+	}
+	functionActivations.EnterFunction(
+		&FunctionType{
+			ReturnTypeAnnotation: NewTypeAnnotation(VoidType),
+		},
 		0,
 	)
 
-	elaboration := NewElaboration(
-		memoryGauge,
-		config.ExtendedElaborationEnabled,
-	)
+	elaboration := NewElaboration(memoryGauge)
 
 	checker := &Checker{
 		Program:             program,
@@ -277,9 +279,9 @@ func (checker *Checker) CheckProgram(program *ast.Program) {
 	registerInElaboration := func(ty Type) {
 		switch typedType := ty.(type) {
 		case *InterfaceType:
-			checker.Elaboration.InterfaceTypes[typedType.ID()] = typedType
+			checker.Elaboration.SetInterfaceType(typedType.ID(), typedType)
 		case *CompositeType:
-			checker.Elaboration.CompositeTypes[typedType.ID()] = typedType
+			checker.Elaboration.SetCompositeType(typedType.ID(), typedType)
 		default:
 			panic(errors.NewUnreachableError())
 		}
@@ -390,7 +392,7 @@ func (checker *Checker) checkTopLevelDeclarationValidity(declarations []ast.Decl
 
 func (checker *Checker) declareGlobalFunctionDeclaration(declaration *ast.FunctionDeclaration) {
 	functionType := checker.functionType(declaration.ParameterList, declaration.ReturnTypeAnnotation)
-	checker.Elaboration.FunctionDeclarationFunctionTypes[declaration] = functionType
+	checker.Elaboration.SetFunctionDeclarationFunctionType(declaration, functionType)
 	checker.declareFunctionDeclaration(declaration, functionType)
 }
 
@@ -431,7 +433,7 @@ func (checker *Checker) checkTypeCompatibility(expression ast.Expression, valueT
 
 			return true
 
-		} else if IsSameTypeKind(unwrappedTargetType, &AddressType{}) {
+		} else if IsSameTypeKind(unwrappedTargetType, TheAddressType) {
 			CheckAddressLiteral(checker.memoryGauge, typedExpression, checker.report)
 
 			return true
@@ -661,7 +663,7 @@ func (checker *Checker) declareGlobalValue(name string) {
 	if variable == nil {
 		return
 	}
-	checker.Elaboration.GlobalValues.Set(name, variable)
+	checker.Elaboration.SetGlobalValue(name, variable)
 }
 
 func (checker *Checker) declareGlobalType(name string) {
@@ -669,7 +671,7 @@ func (checker *Checker) declareGlobalType(name string) {
 	if ty == nil {
 		return
 	}
-	checker.Elaboration.GlobalTypes.Set(name, ty)
+	checker.Elaboration.SetGlobalType(name, ty)
 }
 
 func (checker *Checker) checkResourceMoveOperation(valueExpression ast.Expression, valueType Type) {
@@ -1035,17 +1037,24 @@ func (checker *Checker) convertOptionalType(t *ast.OptionalType) Type {
 
 // convertFunctionType converts the given AST function type into a sema function type.
 //
-// NOTE: type annotations ar *NOT* checked!
+// NOTE: type annotations are *NOT* checked!
 func (checker *Checker) convertFunctionType(t *ast.FunctionType) Type {
-	var parameters []*Parameter
+	parameterTypeAnnotations := t.ParameterTypeAnnotations
 
-	for _, parameterTypeAnnotation := range t.ParameterTypeAnnotations {
-		convertedParameterTypeAnnotation := checker.ConvertTypeAnnotation(parameterTypeAnnotation)
-		parameters = append(parameters,
-			&Parameter{
-				TypeAnnotation: convertedParameterTypeAnnotation,
-			},
-		)
+	var parameters []Parameter
+	parameterCount := len(parameterTypeAnnotations)
+	if parameterCount > 0 {
+		parameters = make([]Parameter, 0, parameterCount)
+
+		for _, parameterTypeAnnotation := range parameterTypeAnnotations {
+			convertedParameterTypeAnnotation := checker.ConvertTypeAnnotation(parameterTypeAnnotation)
+			parameters = append(
+				parameters,
+				Parameter{
+					TypeAnnotation: convertedParameterTypeAnnotation,
+				},
+			)
+		}
 	}
 
 	returnTypeAnnotation := checker.ConvertTypeAnnotation(t.ReturnTypeAnnotation)
@@ -1188,10 +1197,10 @@ func (checker *Checker) convertNominalType(t *ast.NominalType) Type {
 // ConvertTypeAnnotation converts an AST type annotation representation
 // to a sema type annotation
 //
-// NOTE: type annotations ar *NOT* checked!
-func (checker *Checker) ConvertTypeAnnotation(typeAnnotation *ast.TypeAnnotation) *TypeAnnotation {
+// NOTE: type annotations are *NOT* checked!
+func (checker *Checker) ConvertTypeAnnotation(typeAnnotation *ast.TypeAnnotation) TypeAnnotation {
 	convertedType := checker.ConvertType(typeAnnotation.Type)
-	return &TypeAnnotation{
+	return TypeAnnotation{
 		IsResource: typeAnnotation.IsResource,
 		Type:       convertedType,
 	}
@@ -1212,23 +1221,28 @@ func (checker *Checker) functionType(
 	}
 }
 
-func (checker *Checker) parameters(parameterList *ast.ParameterList) []*Parameter {
+func (checker *Checker) parameters(parameterList *ast.ParameterList) []Parameter {
 
-	parameters := make([]*Parameter, len(parameterList.Parameters))
+	var parameters []Parameter
 
-	for i, parameter := range parameterList.Parameters {
-		convertedParameterType := checker.ConvertType(parameter.TypeAnnotation.Type)
+	parameterCount := len(parameterList.Parameters)
+	if parameterCount > 0 {
+		parameters = make([]Parameter, parameterCount)
 
-		// NOTE: copying resource annotation from source type annotation as-is,
-		// so a potential error is properly reported
+		for i, parameter := range parameterList.Parameters {
+			convertedParameterType := checker.ConvertType(parameter.TypeAnnotation.Type)
 
-		parameters[i] = &Parameter{
-			Label:      parameter.Label,
-			Identifier: parameter.Identifier.Identifier,
-			TypeAnnotation: &TypeAnnotation{
-				IsResource: parameter.TypeAnnotation.IsResource,
-				Type:       convertedParameterType,
-			},
+			// NOTE: copying resource annotation from source type annotation as-is,
+			// so a potential error is properly reported
+
+			parameters[i] = Parameter{
+				Label:      parameter.Label,
+				Identifier: parameter.Identifier.Identifier,
+				TypeAnnotation: TypeAnnotation{
+					IsResource: parameter.TypeAnnotation.IsResource,
+					Type:       convertedParameterType,
+				},
+			}
 		}
 	}
 
@@ -1798,6 +1812,8 @@ func (checker *Checker) withSelfResourceInvalidationAllowed(f func()) {
 const ResourceOwnerFieldName = "owner"
 const ResourceUUIDFieldName = "uuid"
 
+const ContractAccountFieldName = "account"
+
 const contractAccountFieldDocString = `
 The account where the contract is deployed in
 `
@@ -1866,7 +1882,7 @@ func (checker *Checker) predeclaredMembers(containerType Type) []*Member {
 			// which is ignored in serialization
 
 			addPredeclaredMember(
-				"account",
+				ContractAccountFieldName,
 				AuthAccountType,
 				common.DeclarationKindField,
 				ast.AccessPrivate,
@@ -1946,51 +1962,57 @@ func (checker *Checker) checkVariableMove(expression ast.Expression) {
 func (checker *Checker) rewritePostConditions(postConditions []*ast.Condition) PostConditionsRewrite {
 
 	var beforeStatements []ast.Statement
-	rewrittenPostConditions := make([]*ast.Condition, len(postConditions))
 
-	beforeExtractor := checker.beforeExtractor()
+	var rewrittenPostConditions []*ast.Condition
 
-	for i, postCondition := range postConditions {
+	count := len(postConditions)
+	if count > 0 {
+		rewrittenPostConditions = make([]*ast.Condition, count)
 
-		// copy condition and set expression to rewritten one
-		newPostCondition := *postCondition
+		beforeExtractor := checker.beforeExtractor()
 
-		testExtraction := beforeExtractor.ExtractBefore(postCondition.Test)
+		for i, postCondition := range postConditions {
 
-		extractedExpressions := testExtraction.ExtractedExpressions
+			// copy condition and set expression to rewritten one
+			newPostCondition := *postCondition
 
-		newPostCondition.Test = testExtraction.RewrittenExpression
+			testExtraction := beforeExtractor.ExtractBefore(postCondition.Test)
 
-		if postCondition.Message != nil {
-			messageExtraction := beforeExtractor.ExtractBefore(postCondition.Message)
+			extractedExpressions := testExtraction.ExtractedExpressions
 
-			newPostCondition.Message = messageExtraction.RewrittenExpression
+			newPostCondition.Test = testExtraction.RewrittenExpression
 
-			extractedExpressions = append(
-				extractedExpressions,
-				messageExtraction.ExtractedExpressions...,
-			)
+			if postCondition.Message != nil {
+				messageExtraction := beforeExtractor.ExtractBefore(postCondition.Message)
+
+				newPostCondition.Message = messageExtraction.RewrittenExpression
+
+				extractedExpressions = append(
+					extractedExpressions,
+					messageExtraction.ExtractedExpressions...,
+				)
+			}
+
+			for _, extractedExpression := range extractedExpressions {
+
+				// NOTE: no need to check the before statements or update elaboration here:
+				// The before statements are visited/checked later
+				variableDeclaration := ast.NewEmptyVariableDeclaration(checker.memoryGauge)
+				variableDeclaration.Identifier = extractedExpression.Identifier
+				variableDeclaration.Transfer = ast.NewTransfer(
+					checker.memoryGauge,
+					ast.TransferOperationCopy,
+					ast.EmptyPosition,
+				)
+				variableDeclaration.Value = extractedExpression.Expression
+
+				beforeStatements = append(beforeStatements,
+					variableDeclaration,
+				)
+			}
+
+			rewrittenPostConditions[i] = &newPostCondition
 		}
-
-		for _, extractedExpression := range extractedExpressions {
-
-			// NOTE: no need to check the before statements or update elaboration here:
-			// The before statements are visited/checked later
-			variableDeclaration := ast.NewEmptyVariableDeclaration(checker.memoryGauge)
-			variableDeclaration.Identifier = extractedExpression.Identifier
-			variableDeclaration.Transfer = ast.NewTransfer(
-				checker.memoryGauge,
-				ast.TransferOperationCopy,
-				ast.EmptyPosition,
-			)
-			variableDeclaration.Value = extractedExpression.Expression
-
-			beforeStatements = append(beforeStatements,
-				variableDeclaration,
-			)
-		}
-
-		rewrittenPostConditions[i] = &newPostCondition
 	}
 
 	return PostConditionsRewrite{
@@ -1999,7 +2021,7 @@ func (checker *Checker) rewritePostConditions(postConditions []*ast.Condition) P
 	}
 }
 
-func (checker *Checker) checkTypeAnnotation(typeAnnotation *TypeAnnotation, pos ast.HasPosition) {
+func (checker *Checker) checkTypeAnnotation(typeAnnotation TypeAnnotation, pos ast.HasPosition) {
 
 	switch typeAnnotation.TypeAnnotationState() {
 	case TypeAnnotationStateMissingResourceAnnotation:
@@ -2088,13 +2110,16 @@ func (checker *Checker) convertInstantiationType(t *ast.InstantiationType) Type 
 	// Always convert (check) the type arguments,
 	// even if the instantiated type
 
+	var typeArgumentAnnotations []TypeAnnotation
 	typeArgumentCount := len(t.TypeArguments)
-	typeArgumentAnnotations := make([]*TypeAnnotation, typeArgumentCount)
+	if typeArgumentCount > 0 {
+		typeArgumentAnnotations = make([]TypeAnnotation, typeArgumentCount)
 
-	for i, rawTypeArgument := range t.TypeArguments {
-		typeArgument := checker.ConvertTypeAnnotation(rawTypeArgument)
-		checker.checkTypeAnnotation(typeArgument, rawTypeArgument)
-		typeArgumentAnnotations[i] = typeArgument
+		for i, rawTypeArgument := range t.TypeArguments {
+			typeArgument := checker.ConvertTypeAnnotation(rawTypeArgument)
+			checker.checkTypeAnnotation(typeArgument, rawTypeArgument)
+			typeArgumentAnnotations[i] = typeArgument
+		}
 	}
 
 	parameterizedType, ok := ty.(ParameterizedType)
@@ -2121,24 +2146,28 @@ func (checker *Checker) convertInstantiationType(t *ast.InstantiationType) Type 
 	typeParameters := parameterizedType.TypeParameters()
 	typeParameterCount := len(typeParameters)
 
-	typeArguments := make([]Type, len(typeArgumentAnnotations))
+	typeArgumentAnnotationCount := len(typeArgumentAnnotations)
+	var typeArguments []Type
+	if typeArgumentAnnotationCount > 0 {
+		typeArguments = make([]Type, typeArgumentAnnotationCount)
 
-	for i, typeAnnotation := range typeArgumentAnnotations {
-		typeArgument := typeAnnotation.Type
-		typeArguments[i] = typeArgument
+		for i, typeAnnotation := range typeArgumentAnnotations {
+			typeArgument := typeAnnotation.Type
+			typeArguments[i] = typeArgument
 
-		// If the type parameter corresponding to the type argument (if any) has a type bound,
-		// then check that the argument is a subtype of the type bound.
+			// If the type parameter corresponding to the type argument (if any) has a type bound,
+			// then check that the argument is a subtype of the type bound.
 
-		if i < typeParameterCount {
-			typeParameter := typeParameters[i]
-			rawTypeArgument := t.TypeArguments[i]
+			if i < typeParameterCount {
+				typeParameter := typeParameters[i]
+				rawTypeArgument := t.TypeArguments[i]
 
-			err := typeParameter.checkTypeBound(
-				typeArgument,
-				ast.NewRangeFromPositioned(checker.memoryGauge, rawTypeArgument),
-			)
-			checker.report(err)
+				err := typeParameter.checkTypeBound(
+					typeArgument,
+					ast.NewRangeFromPositioned(checker.memoryGauge, rawTypeArgument),
+				)
+				checker.report(err)
+			}
 		}
 	}
 
@@ -2261,11 +2290,11 @@ func (checker *Checker) declareGlobalRanges() {
 		return nil
 	})
 
-	checker.Elaboration.GlobalTypes.Foreach(func(name string, variable *Variable) {
+	checker.Elaboration.ForEachGlobalType(func(name string, variable *Variable) {
 		checker.PositionInfo.recordGlobalRange(memoryGauge, name, variable)
 	})
 
-	checker.Elaboration.GlobalValues.Foreach(func(name string, variable *Variable) {
+	checker.Elaboration.ForEachGlobalValue(func(name string, variable *Variable) {
 		checker.PositionInfo.recordGlobalRange(memoryGauge, name, variable)
 	})
 }
@@ -2336,4 +2365,35 @@ func wrapWithOptionalIfNotNil(typ Type) Type {
 
 func (checker *Checker) CheckStatement(element ast.Statement) {
 	ast.AcceptStatement[struct{}](element, checker)
+}
+
+func (checker *Checker) checkStaticModifier(isStatic bool, position ast.HasPosition) {
+	if isStatic && !checker.Config.AllowStaticDeclarations {
+		checker.report(
+			&InvalidStaticModifierError{
+				Range: ast.NewRangeFromPositioned(checker.memoryGauge, position),
+			},
+		)
+	}
+}
+
+func (checker *Checker) checkNativeModifier(isNative bool, position ast.HasPosition) {
+	if isNative && !checker.Config.AllowNativeDeclarations {
+		checker.report(
+			&InvalidNativeModifierError{
+				Range: ast.NewRangeFromPositioned(checker.memoryGauge, position),
+			},
+		)
+	}
+}
+
+func (checker *Checker) isAvailableMember(expressionType Type, identifier string) bool {
+	if !checker.Config.AccountLinkingEnabled &&
+		expressionType == AuthAccountType &&
+		identifier == AuthAccountTypeLinkAccountFunctionName {
+
+		return false
+	}
+
+	return true
 }

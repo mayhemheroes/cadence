@@ -55,7 +55,7 @@ func (programs Programs) load(
 		return err
 	}
 
-	program, err := parser.ParseProgram(code, nil)
+	program, err := parser.ParseProgram(nil, code, parser.Config{})
 	if err != nil {
 		return wrapError(err)
 	}
@@ -111,8 +111,9 @@ func (programs Programs) check(
 
 				var elaboration *sema.Elaboration
 				switch importedLocation {
-				case stdlib.CryptoChecker.Location:
-					elaboration = stdlib.CryptoChecker.Elaboration
+				case stdlib.CryptoCheckerLocation:
+					cryptoChecker := stdlib.CryptoChecker()
+					elaboration = cryptoChecker.Elaboration
 
 				default:
 					err := programs.load(config, importedLocation, location, importRange)

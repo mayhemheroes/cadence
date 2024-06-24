@@ -33,23 +33,26 @@ type ValueIndexingInfo struct {
 
 // SimpleType represents a simple nominal type.
 type SimpleType struct {
-	Name                 string
-	QualifiedName        string
-	TypeID               TypeID
-	tag                  TypeTag
-	IsInvalid            bool
-	IsResource           bool
-	Storable             bool
-	Equatable            bool
-	ExternallyReturnable bool
-	Importable           bool
-	IsSuperTypeOf        func(subType Type) bool
-	Members              func(*SimpleType) map[string]MemberResolver
-	members              map[string]MemberResolver
-	membersOnce          sync.Once
-	NestedTypes          *StringTypeOrderedMap
-	ValueIndexingInfo    ValueIndexingInfo
+	Name                string
+	QualifiedName       string
+	TypeID              TypeID
+	tag                 TypeTag
+	IsResource          bool
+	Storable            bool
+	Equatable           bool
+	Exportable          bool
+	Importable          bool
+	IsSuperTypeOf       func(subType Type) bool
+	Members             func(*SimpleType) map[string]MemberResolver
+	memberResolvers     map[string]MemberResolver
+	memberResolversOnce sync.Once
+	NestedTypes         *StringTypeOrderedMap
+	ValueIndexingInfo   ValueIndexingInfo
 }
+
+var _ Type = &SimpleType{}
+var _ ValueIndexableType = &SimpleType{}
+var _ ContainerType = &SimpleType{}
 
 func (*SimpleType) IsType() {}
 
@@ -78,7 +81,7 @@ func (t *SimpleType) IsResourceType() bool {
 }
 
 func (t *SimpleType) IsInvalidType() bool {
-	return t.IsInvalid
+	return t == InvalidType
 }
 
 func (t *SimpleType) IsStorable(_ map[*Member]bool) bool {
@@ -89,8 +92,8 @@ func (t *SimpleType) IsEquatable() bool {
 	return t.Equatable
 }
 
-func (t *SimpleType) IsExternallyReturnable(_ map[*Member]bool) bool {
-	return t.ExternallyReturnable
+func (t *SimpleType) IsExportable(_ map[*Member]bool) bool {
+	return t.Exportable
 }
 
 func (t *SimpleType) IsImportable(_ map[*Member]bool) bool {
@@ -115,16 +118,16 @@ func (t *SimpleType) Resolve(_ *TypeParameterTypeOrderedMap) Type {
 
 func (t *SimpleType) GetMembers() map[string]MemberResolver {
 	t.initializeMembers()
-	return t.members
+	return t.memberResolvers
 }
 
 func (t *SimpleType) initializeMembers() {
-	t.membersOnce.Do(func() {
+	t.memberResolversOnce.Do(func() {
 		var members map[string]MemberResolver
 		if t.Members != nil {
 			members = t.Members(t)
 		}
-		t.members = withBuiltinMembers(t, members)
+		t.memberResolvers = withBuiltinMembers(t, members)
 	})
 }
 

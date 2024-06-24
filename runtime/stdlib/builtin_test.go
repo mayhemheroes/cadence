@@ -38,8 +38,9 @@ func newUnmeteredInMemoryStorage() interpreter.InMemoryStorage {
 
 func newInterpreter(t *testing.T, code string, valueDeclarations ...StandardLibraryValue) *interpreter.Interpreter {
 	program, err := parser.ParseProgram(
-		[]byte(code),
 		nil,
+		[]byte(code),
+		parser.Config{},
 	)
 	require.NoError(t, err)
 
@@ -96,7 +97,7 @@ func TestAssert(t *testing.T) {
 
 	_, err := inter.Invoke(
 		"test",
-		interpreter.BoolValue(false),
+		interpreter.FalseValue,
 		interpreter.NewUnmeteredStringValue("oops"),
 	)
 	assert.Equal(t,
@@ -109,7 +110,7 @@ func TestAssert(t *testing.T) {
 		err,
 	)
 
-	_, err = inter.Invoke("test", interpreter.BoolValue(false))
+	_, err = inter.Invoke("test", interpreter.FalseValue)
 	assert.Equal(t,
 		interpreter.Error{
 			Err: AssertionError{
@@ -121,12 +122,12 @@ func TestAssert(t *testing.T) {
 
 	_, err = inter.Invoke(
 		"test",
-		interpreter.BoolValue(true),
+		interpreter.TrueValue,
 		interpreter.NewUnmeteredStringValue("oops"),
 	)
 	assert.NoError(t, err)
 
-	_, err = inter.Invoke("test", interpreter.BoolValue(true))
+	_, err = inter.Invoke("test", interpreter.TrueValue)
 	assert.NoError(t, err)
 }
 

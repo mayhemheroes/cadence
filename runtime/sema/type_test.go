@@ -51,7 +51,7 @@ func TestConstantSizedType_String_OfFunctionType(t *testing.T) {
 
 	ty := &ConstantSizedType{
 		Type: &FunctionType{
-			Parameters: []*Parameter{
+			Parameters: []Parameter{
 				{
 					TypeAnnotation: NewTypeAnnotation(Int8Type),
 				},
@@ -92,7 +92,7 @@ func TestVariableSizedType_String_OfFunctionType(t *testing.T) {
 
 	ty := &VariableSizedType{
 		Type: &FunctionType{
-			Parameters: []*Parameter{
+			Parameters: []Parameter{
 				{
 					TypeAnnotation: NewTypeAnnotation(Int8Type),
 				},
@@ -650,7 +650,7 @@ func TestIdentifierCacheUpdate(t *testing.T) {
           }
 	`
 
-	program, err := parser.ParseProgram([]byte(code), nil)
+	program, err := parser.ParseProgram(nil, []byte(code), parser.Config{})
 	require.NoError(t, err)
 
 	checker, err := NewChecker(
@@ -740,7 +740,9 @@ func TestCommonSuperType(t *testing.T) {
 		_ = newTypeTagFromLowerMask(32)
 	})
 
-	nilType := &OptionalType{NeverType}
+	nilType := &OptionalType{
+		Type: NeverType,
+	}
 
 	resourceType := &CompositeType{
 		Location:   nil,
@@ -1481,7 +1483,7 @@ func TestCommonSuperType(t *testing.T) {
 		t.Parallel()
 
 		funcType1 := &FunctionType{
-			Parameters: []*Parameter{
+			Parameters: []Parameter{
 				{
 					TypeAnnotation: NewTypeAnnotation(StringType),
 				},
@@ -1491,7 +1493,7 @@ func TestCommonSuperType(t *testing.T) {
 		}
 
 		funcType2 := &FunctionType{
-			Parameters: []*Parameter{
+			Parameters: []Parameter{
 				{
 					TypeAnnotation: NewTypeAnnotation(IntType),
 				},
